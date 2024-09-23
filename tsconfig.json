@@ -1,0 +1,8 @@
+{
+    "compilerOptions": {
+        "target": "es2022",
+        "esModuleInterop": true,
+        "noUncheckedIndexedAccess": true,
+        "strict": true
+    }
+}
