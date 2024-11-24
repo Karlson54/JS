@@ -1,113 +1,155 @@
-// Base type for a product
-type BaseProduct = {
-    id: number;
-    name: string;
-    price: number;
-    description?: string;
+// Базовий інтерфейс
+interface BaseContent {
+  id: string;
+  createdAt: Date;
+  updatedAt: Date;
+  publishedAt?: Date;
+  status: 'draft' | 'published' | 'archived';
+}
+
+// Тип для статті
+interface Article extends BaseContent {
+  title: string;
+  content: string;
+  author: string;
+  tags: string[];
+}
+
+// Тип для продукту
+interface Product extends BaseContent {
+  name: string;
+  description: string;
+  price: number;
+  category: string;
+  stock: number;
+}
+
+// Generic для операцій
+type ContentOperations<T extends BaseContent> = {
+  create: (item: T) => T;
+  read: (id: string) => T | null;
+  update: (id: string, updates: Partial<T>) => T | null;
+  delete: (id: string) => boolean;
+};
+
+type Role = 'admin' | 'editor' | 'viewer';
+
+type Permission = {
+  create: boolean;
+  read: boolean;
+  update: boolean;
+  delete: boolean;
+};
+
+// Контроль доступу
+type AccessControl<T extends BaseContent> = {
+  [role in Role]: {
+    [key in keyof Permission]: (content: T) => boolean;
   };
-  
-  // Specific type for electronics
-  type Electronics = BaseProduct & {
-    category: 'electronics';
-    brand: string;
-    warrantyPeriod: string;
-  };
-  
-  // Specific type for clothing
-  type Clothing = BaseProduct & {
-    category: 'clothing';
-    size: string;
-    material: string;
-  };
-  
-  // Function to find a product by ID
-  const findProduct = <T extends BaseProduct>(products: T[], id: number): T | undefined => {
-    return products.find(product => product.id === id);
-  };
-  
-  // Function to filter products by maximum price
-  const filterByPrice = <T extends BaseProduct>(products: T[], maxPrice: number): T[] => {
-    return products.filter(product => product.price <= maxPrice);
-  };
-  
-  // Type for a cart item
-  type CartItem<T> = {
-    product: T;
-    quantity: number;
-  };
-  
-  // Function to add a product to the cart
-  const addToCart = <T extends BaseProduct>(
-    cart: CartItem<T>[],
-    product: T,
-    quantity: number
-  ): CartItem<T>[] => {
-    const existingItem = cart.find(item => item.product.id === product.id);
-  
-    if (existingItem) {
-      existingItem.quantity += quantity;
-    } else {
-      cart.push({ product, quantity });
-    }
-  
-    return cart;
-  };
-  
-  // Function to calculate the total cost of the cart
-  const calculateTotal = <T extends BaseProduct>(cart: CartItem<T>[]): number => {
-    return cart.reduce((total, item) => total + item.product.price * item.quantity, 0);
-  };
-  
-  // Create test data for different product types
-  const electronics: Electronics[] = [
-    {
-      id: 1,
-      name: "Phone",
-      price: 10000,
-      category: 'electronics',
-      brand: 'Apple',
-      warrantyPeriod: '2 years'
-    },
-    {
-      id: 2,
-      name: "Laptop",
-      price: 20000,
-      category: 'electronics',
-      brand: 'Dell',
-      warrantyPeriod: '1 year'
-    }
-  ];
-  
-  const clothing: Clothing[] = [
-    {
-      id: 3,
-      name: "T-shirt",
-      price: 500,
-      category: 'clothing',
-      size: 'M',
-      material: 'cotton'
-    },
-    {
-      id: 4,
-      name: "Jeans",
-      price: 1500,
-      category: 'clothing',
-      size: 'L',
-      material: 'denim'
-    }
-  ];
-  
-  // Testing the functions
-  const phone = findProduct(electronics, 1);
-  console.log("Found product:", phone);
-  
-  const affordableElectronics = filterByPrice(electronics, 15000);
-  console.log("Products under price 15000:", affordableElectronics);
-  
-  let cart: CartItem<BaseProduct>[] = [];
-  if (phone) {
-    cart = addToCart(cart, phone, 1);
+};
+
+// Приклад системи для Article
+const articleAccessControl: AccessControl<Article> = {
+  admin: {
+    create: () => true,
+    read: () => true,
+    update: () => true,
+    delete: () => true,
+  },
+  editor: {
+    create: () => true,
+    read: () => true,
+    update: (content) => content.status !== 'archived',
+    delete: () => false,
+  },
+  viewer: {
+    create: () => false,
+    read: (content) => content.status === 'published',
+    update: () => false,
+    delete: () => false,
+  },
+};
+
+// Базовий тип валідатора
+type Validator<T> = {
+  validate: (data: T) => ValidationResult;
+};
+
+type ValidationResult = {
+  isValid: boolean;
+  errors?: string[];
+};
+
+// Валідатор для статей
+const articleValidator: Validator<Article> = {
+  validate: (data) => {
+    const errors: string[] = [];
+    if (!data.title) errors.push('Title is required.');
+    if (!data.content) errors.push('Content is required.');
+    return { isValid: errors.length === 0, errors };
+  },
+};
+
+// Валідатор для продуктів
+const productValidator: Validator<Product> = {
+  validate: (data) => {
+    const errors: string[] = [];
+    if (!data.name) errors.push('Name is required.');
+    if (data.price <= 0) errors.push('Price must be greater than zero.');
+    return { isValid: errors.length === 0, errors };
+  },
+};
+
+// Універсальний валідатор
+function validateContent<T extends Article | Product>(
+  content: T
+): ValidationResult {
+  if ('title' in content) {
+    return articleValidator.validate(content as Article);
   }
-  
-  const total = calculateTotal(cart);
-  console.log("Total cart cost:", total);  
+  if ('name' in content) {
+    return productValidator.validate(content as Product);
+  }
+  return { isValid: false, errors: ['Unknown content type'] };
+}
+
+// Підтримка версіонування
+type Versioned<T extends BaseContent> = T & {
+  version: number;
+  previousVersions: Array<Versioned<T>>;
+  saveVersion: () => void;
+};
+
+// Реалізація версіонування
+function createVersioned<T extends BaseContent>(content: T): Versioned<T> {
+  const versionedContent = {
+    ...content,
+    version: 1,
+    previousVersions: [] as Array<Versioned<T>>,
+    saveVersion() {
+      const previousVersion = { ...this } as Versioned<T>;
+      previousVersion.previousVersions = []; // очищуємо, щоб уникнути циклічності
+      this.previousVersions.push(previousVersion);
+      this.version++;
+    },
+  };
+  return versionedContent as Versioned<T>;
+}
+
+// Приклад
+const versionedArticle = createVersioned<Article>({
+  id: '1',
+  createdAt: new Date(),
+  updatedAt: new Date(),
+  status: 'draft',
+  title: 'Example Article',
+  content: 'Lorem ipsum...',
+  author: 'John Doe',
+  tags: ['example', 'typescript'],
+});
+
+versionedArticle.saveVersion();
+versionedArticle.status = 'published';
+versionedArticle.saveVersion();
+
+console.log(versionedArticle);
