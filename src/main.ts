@@ -1,155 +1,188 @@
-// Базовий інтерфейс
-interface BaseContent {
-  id: string;
-  createdAt: Date;
-  updatedAt: Date;
-  publishedAt?: Date;
-  status: 'draft' | 'published' | 'archived';
+// Enum definitions
+enum StudentStatus {
+  Active = "Active",
+  Academic_Leave = "Academic_Leave",
+  Graduated = "Graduated",
+  Expelled = "Expelled",
 }
 
-// Тип для статті
-interface Article extends BaseContent {
-  title: string;
-  content: string;
-  author: string;
-  tags: string[];
+enum CourseType {
+  Mandatory = "Mandatory",
+  Optional = "Optional",
+  Special = "Special",
 }
 
-// Тип для продукту
-interface Product extends BaseContent {
+enum Semester {
+  First = "First",
+  Second = "Second",
+}
+
+enum Grade {
+  Excellent = 5,
+  Good = 4,
+  Satisfactory = 3,
+  Unsatisfactory = 2,
+}
+
+enum Faculty {
+  Computer_Science = "Computer_Science",
+  Economics = "Economics",
+  Law = "Law",
+  Engineering = "Engineering",
+}
+
+// Interface definitions
+interface Student {
+  id: number;
+  fullName: string;
+  faculty: Faculty;
+  year: number;
+  status: StudentStatus;
+  enrollmentDate: Date;
+  groupNumber: string;
+}
+
+interface Course {
+  id: number;
   name: string;
-  description: string;
-  price: number;
-  category: string;
-  stock: number;
+  type: CourseType;
+  credits: number;
+  semester: Semester;
+  faculty: Faculty;
+  maxStudents: number;
 }
 
-// Generic для операцій
-type ContentOperations<T extends BaseContent> = {
-  create: (item: T) => T;
-  read: (id: string) => T | null;
-  update: (id: string, updates: Partial<T>) => T | null;
-  delete: (id: string) => boolean;
-};
+interface GradeRecord {
+  studentId: number;
+  courseId: number;
+  grade: Grade;
+  date: Date;
+  semester: Semester;
+}
 
-type Role = 'admin' | 'editor' | 'viewer';
+// UniversityManagementSystem class
+class UniversityManagementSystem {
+  private students: Student[] = [];
+  private grades: GradeRecord[] = [];
+  private studentIdCounter = 1;
 
-type Permission = {
-  create: boolean;
-  read: boolean;
-  update: boolean;
-  delete: boolean;
-};
+  // Courses can now be accessed via a public method
+  private courses: Course[] = [];
 
-// Контроль доступу
-type AccessControl<T extends BaseContent> = {
-  [role in Role]: {
-    [key in keyof Permission]: (content: T) => boolean;
-  };
-};
-
-// Приклад системи для Article
-const articleAccessControl: AccessControl<Article> = {
-  admin: {
-    create: () => true,
-    read: () => true,
-    update: () => true,
-    delete: () => true,
-  },
-  editor: {
-    create: () => true,
-    read: () => true,
-    update: (content) => content.status !== 'archived',
-    delete: () => false,
-  },
-  viewer: {
-    create: () => false,
-    read: (content) => content.status === 'published',
-    update: () => false,
-    delete: () => false,
-  },
-};
-
-// Базовий тип валідатора
-type Validator<T> = {
-  validate: (data: T) => ValidationResult;
-};
-
-type ValidationResult = {
-  isValid: boolean;
-  errors?: string[];
-};
-
-// Валідатор для статей
-const articleValidator: Validator<Article> = {
-  validate: (data) => {
-    const errors: string[] = [];
-    if (!data.title) errors.push('Title is required.');
-    if (!data.content) errors.push('Content is required.');
-    return { isValid: errors.length === 0, errors };
-  },
-};
-
-// Валідатор для продуктів
-const productValidator: Validator<Product> = {
-  validate: (data) => {
-    const errors: string[] = [];
-    if (!data.name) errors.push('Name is required.');
-    if (data.price <= 0) errors.push('Price must be greater than zero.');
-    return { isValid: errors.length === 0, errors };
-  },
-};
-
-// Універсальний валідатор
-function validateContent<T extends Article | Product>(
-  content: T
-): ValidationResult {
-  if ('title' in content) {
-    return articleValidator.validate(content as Article);
+  addCourse(course: Omit<Course, "id">): Course {
+      const newCourse: Course = { id: this.courses.length + 1, ...course };
+      this.courses.push(newCourse);
+      return newCourse;
   }
-  if ('name' in content) {
-    return productValidator.validate(content as Product);
+
+  getCourses(): Course[] {
+      return this.courses;
   }
-  return { isValid: false, errors: ['Unknown content type'] };
+
+  enrollStudent(student: Omit<Student, "id">): Student {
+      const newStudent: Student = { id: this.studentIdCounter++, ...student };
+      this.students.push(newStudent);
+      return newStudent;
+  }
+
+  registerForCourse(studentId: number, courseId: number): void {
+      const student = this.students.find(s => s.id === studentId);
+      const course = this.courses.find(c => c.id === courseId);
+
+      if (!student || !course) {
+          throw new Error("Student or course not found.");
+      }
+
+      if (student.faculty !== course.faculty) {
+          throw new Error("Student and course faculty do not match.");
+      }
+
+      const enrolledStudents = this.grades.filter(g => g.courseId === courseId).length;
+      if (enrolledStudents >= course.maxStudents) {
+          throw new Error("Course is full.");
+      }
+
+      this.grades.push({ studentId, courseId, grade: null as any, date: new Date(), semester: course.semester });
+  }
+
+  setGrade(studentId: number, courseId: number, grade: Grade): void {
+      const enrollment = this.grades.find(g => g.studentId === studentId && g.courseId === courseId);
+      if (!enrollment) {
+          throw new Error("Student is not registered for the course.");
+      }
+      enrollment.grade = grade;
+      enrollment.date = new Date();
+  }
+
+  updateStudentStatus(studentId: number, newStatus: StudentStatus): void {
+      const student = this.students.find(s => s.id === studentId);
+      if (!student) {
+          throw new Error("Student not found.");
+      }
+      student.status = newStatus;
+  }
+
+  getStudentsByFaculty(faculty: Faculty): Student[] {
+      return this.students.filter(s => s.faculty === faculty);
+  }
+
+  getStudentGrades(studentId: number): GradeRecord[] {
+      return this.grades.filter(g => g.studentId === studentId);
+  }
+
+  getAvailableCourses(faculty: Faculty, semester: Semester): Course[] {
+      return this.courses.filter(c => c.faculty === faculty && c.semester === semester);
+  }
+
+  calculateAverageGrade(studentId: number): number {
+      const studentGrades = this.getStudentGrades(studentId).filter(g => g.grade !== null);
+      if (studentGrades.length === 0) return 0;
+
+      const total = studentGrades.reduce((sum, g) => sum + g.grade, 0);
+      return total / studentGrades.length;
+  }
+
+  getTopStudentsByFaculty(faculty: Faculty): Student[] {
+      const students = this.getStudentsByFaculty(faculty);
+      return students.filter(student => {
+          const avgGrade = this.calculateAverageGrade(student.id);
+          return avgGrade >= Grade.Excellent;
+      });
+  }
 }
 
-// Підтримка версіонування
-type Versioned<T extends BaseContent> = T & {
-  version: number;
-  previousVersions: Array<Versioned<T>>;
-  saveVersion: () => void;
-};
+// Example usage
+const ums = new UniversityManagementSystem();
 
-// Реалізація версіонування
-function createVersioned<T extends BaseContent>(content: T): Versioned<T> {
-  const versionedContent = {
-    ...content,
-    version: 1,
-    previousVersions: [] as Array<Versioned<T>>,
-    saveVersion() {
-      const previousVersion = { ...this } as Versioned<T>;
-      previousVersion.previousVersions = []; // очищуємо, щоб уникнути циклічності
-      this.previousVersions.push(previousVersion);
-      this.version++;
-    },
-  };
-  return versionedContent as Versioned<T>;
-}
-
-// Приклад
-const versionedArticle = createVersioned<Article>({
-  id: '1',
-  createdAt: new Date(),
-  updatedAt: new Date(),
-  status: 'draft',
-  title: 'Example Article',
-  content: 'Lorem ipsum...',
-  author: 'John Doe',
-  tags: ['example', 'typescript'],
+// Adding courses
+ums.addCourse({
+  name: "Introduction to Programming",
+  type: CourseType.Mandatory,
+  credits: 4,
+  semester: Semester.First,
+  faculty: Faculty.Computer_Science,
+  maxStudents: 30,
 });
 
-versionedArticle.saveVersion();
-versionedArticle.status = 'published';
-versionedArticle.saveVersion();
+// Enrolling a student
+const student = ums.enrollStudent({
+  fullName: "John Doe",
+  faculty: Faculty.Computer_Science,
+  year: 1,
+  status: StudentStatus.Active,
+  enrollmentDate: new Date(),
+  groupNumber: "CS-101",
+});
 
-console.log(versionedArticle);
+//Updating student status
+ums.updateStudentStatus(1, StudentStatus.Graduated);
+
+// Registering for a course
+ums.registerForCourse(student.id, 1);
+
+// Setting a grade
+ums.setGrade(student.id, 1, Grade.Excellent);
+
+console.log("Student grades:", ums.getStudentGrades(student.id));
+console.log("Average grade:", ums.calculateAverageGrade(student.id));
+console.log("Top students:", ums.getTopStudentsByFaculty(Faculty.Computer_Science));
